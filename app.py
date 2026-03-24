@@ -79,7 +79,7 @@ def get_entities(backend_bytes):
 
 
 def recalc_for_entity(backend_bytes, entity_name, work_dir):
-    """Set entity in Diagnostico and recalculate."""
+    """Set entity in Diagnostico and recalculate with LibreOffice."""
     work_file = os.path.join(work_dir, "backend_work.xlsx")
     with open(work_file, 'wb') as f:
         f.write(backend_bytes)
@@ -88,15 +88,34 @@ def recalc_for_entity(backend_bytes, entity_name, work_dir):
     ws['A9'] = entity_name
     wb.save(work_file)
     wb.close()
-    # Try LibreOffice recalc
+
+    # Recalculate with LibreOffice
     try:
+        # Method 1: Use macro to recalc and save
+        macro_script = os.path.join(work_dir, "recalc_macro.py")
+        with open(macro_script, 'w') as f:
+            f.write(f'''
+import subprocess, os
+input_file = "{work_file}"
+output_dir = "{work_dir}"
+# Open in LibreOffice, which forces recalculation, then save
+result = subprocess.run(
+    ["libreoffice", "--headless", "--calc", "--convert-to", "xlsx",
+     "--outdir", output_dir, input_file],
+    capture_output=True, text=True, timeout=120,
+    env={{**os.environ, "HOME": "{work_dir}"}},
+)
+print(result.stdout)
+print(result.stderr)
+''')
         subprocess.run(
-            ['libreoffice', '--headless', '--calc', '--convert-to', 'xlsx',
-             '--outdir', work_dir, work_file],
-            capture_output=True, timeout=60
+            ['python3', macro_script],
+            capture_output=True, text=True, timeout=120
         )
-    except Exception:
-        pass  # If LibreOffice not available, use cached values
+    except Exception as e:
+        st.warning(f"Recalc warning for {entity_name.strip()}: {e}")
+
+    return work_file
     return work_file
 
 
